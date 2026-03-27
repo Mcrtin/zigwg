@@ -34,15 +34,15 @@
     .dependencies = .{
         .mcgen = .{
             .url = "./mcgen",
-            .hash = "N-V-__8AAJS6kgC0e7WKHhIFKO9XCq0CbHuNGDU00IIarTpX",
+            .hash = "N-V-__8AAMC3RQBVpLgxDAWoyEC-dxMEGFG82u5D_6nu-xQe",
         },
         .zlm = .{
             .url = "git+https://github.com/ziglibs/zlm#35ab7df57cfb5392a11486f6e4b03a82f849a118",
             .hash = "zlm-0.1.0-LoZ6yDawAADMopilIe9MDzer0UqmruCy_PuhNv4OMc7c",
         },
         .mcdata = .{
-            .url = "git+https://github.com/Mcrtin/zigmcdata#0a95234803c0c77fd838bada7907f71750f5a885",
-            .hash = "zigmcdata-0.0.0-bN5yugynAACF8RQ15xEz3S_GbiZoGP4v218g0RaeTFIK",
+            .url = "git+https://github.com/Mcrtin/zigmcdata#c3afa34ebe61d6d76e7d545e6f297caa5584c56a",
+            .hash = "zigmcdata-0.0.0-bN5yujSqAADn0tkvJC-07vL0keShU0BTseQN8B2g-wsU",
         },
     },
     .paths = .{

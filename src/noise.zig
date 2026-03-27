@@ -3,8 +3,9 @@ const rng = @import("rng.zig");
 const mf64 = @import("zlm").as(f64);
 const math = @import("math.zig");
 const perlin = @import("perlin_noise.zig");
+const mcg = @import("mc-generated");
 
-pub const NoiseData = struct { firstOctave: i32, amplitudes: []const f64 };
+pub const NoiseData = mcg.worldgen.noise;
 
 pub inline fn createLegacyNetherBiome(rng_type: type, random: *rng.Rng(rng_type), comptime octsAndAmps: struct { firstOctave: i32, amplitudes: []const f64 }) NormalNoise(octsAndAmps.amplitudes.len) {
     return .init(random, octsAndAmps, false);

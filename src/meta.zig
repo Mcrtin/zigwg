@@ -45,7 +45,7 @@ pub fn getFromRegistry(comptime registry: type, comptime name: []const u8) regis
     }
 }
 
-pub fn getFromRegistryT(T: type, comptime registry: type, comptime name: []const u8) T {
+pub fn getFromRegistryT(comptime T: type, comptime registry: type, comptime name: []const u8) T {
     comptime {
         if (!std.mem.startsWith(u8, name, "minecraft:")) @compileError("unsupported string " ++ name);
 

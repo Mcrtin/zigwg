@@ -21,18 +21,17 @@ pub fn build(b: *std.Build) void {
     // target and optimize options) will be listed when running `zig build --help`
     // in this directory.
 
-    const mcdata_dep = b.dependency("mcdata", .{});
-    const mcdata = mcdata_dep.artifact("zigmcdata");
-    const mcdata_exe = b.addRunArtifact(mcdata);
-    mcdata_exe.addArg("1.21.11");
-    const out = mcdata_exe.addOutputDirectoryArg("out");
-    _ = mcdata_exe.addOutputDirectoryArg("tmp");
+    // const mcdata_dep = b.dependency("mcdata", .{});
+    // const mcdata = mcdata_dep.artifact("zigmcdata");
+    // const mcdata_exe = b.addRunArtifact(mcdata);
+    // mcdata_exe.addArg("1.21.11");
+    // const out = mcdata_exe.addOutputDirectoryArg("out");
+    // _ = mcdata_exe.addOutputDirectoryArg("tmp");
 
-
-    // const mcgen_dep = b.dependency("mcgen", .{});
+    const mcgen_dep = b.dependency("mcgen", .{});
     const gen_mod = b.addModule(
         "mc-generated",
-        .{ .root_source_file = out.path(b, "root.zig") },
+        .{ .root_source_file = mcgen_dep.path("root.zig") },
     );
 
     const zlm_dep = b.dependency("zlm", .{});
