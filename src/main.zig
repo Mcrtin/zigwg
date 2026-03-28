@@ -40,8 +40,8 @@ pub fn main() !void {
 
     const firstNoiseXBlock = x;
     const firstNoiseZBlock = z;
-    const cellWidth: u31 = @intCast(quartToBlock(settings.noise.size_horizontal));
-    const cellHeight: u31 = @intCast(quartToBlock(settings.noise.size_vertical));
+    const cellWidth: u31 = comptime @intCast(quartToBlock(settings.noise.size_horizontal));
+    const cellHeight: u31 = comptime @intCast(quartToBlock(settings.noise.size_vertical));
     const cellCountXZ = 16 / cellWidth;
     const cellCountY = @divFloor(settings.noise.height, cellHeight);
     _ = cellCountY; // autofix
@@ -78,7 +78,7 @@ pub fn main() !void {
     const rng_type = if (settings.legacy_random_source) LegacyRng else XoroshiroRng;
     const noise_holder = density_function.initNoiseHolder(mcg.worldgen.noise, rng_type, rng_factory);
 
-    const val = density_function.evalDensityFunction(settings.noise_router.final_density, .{ .x = x * 16, .y = 0, .z = z * 16 }, .{ .settings = settings, .noise_holder = noise_holder, .blended_noise = blended_noise });
+    const val = density_function.evalDensityFunction(settings.noise_router.final_density, .{ .x = x * 16, .y = 0, .z = z * 16 }, .{ .settings = settings, .noise_holder = noise_holder, .blended_noise = blended_noise, .interpolator = density_function.Interpolator(cellWidth, cellHeight){}, .chunk_pos = .{ .x = x, .z = z }, .min_y = settings.noise.min_y });
     std.debug.print("final_density: {d}\n", .{val});
 }
 

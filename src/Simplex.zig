@@ -3,8 +3,9 @@ const rng = @import("rng.zig");
 const mf64 = @import("zlm").as(f64);
 const mi32 = @import("zlm").as(i32);
 const math = @import("math.zig");
+const Simplex = @This();
 
-pub const ImprovedSimplex = struct {
+pub const Improved = struct {
     pub const max_value = 2.0;
     simplex: Simplex,
     pub fn init(rng_type: type, random: *rng.Rng(rng_type)) @This() {
@@ -76,80 +77,78 @@ pub const ImprovedSimplex = struct {
     }
 };
 
-pub const Simplex = struct {
-    const GRADIENT = [_]mf64.Vec3{
-        .new(1, 1, 0),
-        .new(-1, 1, 0),
-        .new(1, -1, 0),
-        .new(-1, -1, 0),
-        .new(1, 0, 1),
-        .new(-1, 0, 1),
-        .new(1, 0, -1),
-        .new(-1, 0, -1),
-        .new(0, 1, 1),
-        .new(0, -1, 1),
-        .new(0, 1, -1),
-        .new(0, -1, -1),
-        .new(1, 1, 0),
-        .new(0, -1, 1),
-        .new(-1, 1, 0),
-        .new(0, -1, -1),
-    };
-
-    offset: mf64.Vec3,
-    permutation: [256]u8 = blk: {
-        var res: [256]u8 = undefined;
-        for (&res, 0..) |*item, i| item.* = i;
-        break :blk res;
-    },
-
-    pub fn init(rng_type: type, random: *rng.Rng(rng_type)) @This() {
-        var res: @This() = .{ .offset = .new(random.nextDouble() * 256.0, random.nextDouble() * 256.0, random.nextDouble() * 256.0) };
-        for (&res.permutation, 0..) |*item, i| {
-            const idx: u8 = @intCast(i);
-            const random_idx: u8 = @intCast(random.nextIntBounded(256 - @as(u9, idx)));
-            std.mem.swap(u8, item, &res.permutation[random_idx + idx]);
-        }
-        return res;
-    }
-
-    inline fn p(self: *const @This(), index: anytype) u8 {
-        return self.permutation[@as(usize, index & 0xff)];
-    }
-
-    fn getCornerNoise3D(gradientIndex: u8, pos: mf64.Vec3, offset: f64) f64 {
-        const d = offset - pos.length2();
-        return if (d < 0.0)
-            0.0
-        else
-            d * d * d * d * GRADIENT[gradientIndex].dot(pos);
-    }
-
-    pub fn getValue(self: *const @This(), pos: mf64.Vec2) f64 {
-        const F2 = 0.5 * (@sqrt(@as(f64, 3)) - 1.0);
-        const G2 = (3.0 - @sqrt(@as(f64, 3))) / 6.0;
-        const d = (pos.x + pos.y) * F2;
-        const floor = @floor(pos.x + d);
-        const floor1 = @floor(pos.y + d);
-        const d1 = (floor + floor1) * G2;
-        const d2 = floor - d1;
-        const d3 = floor1 - d1;
-        const d4 = pos.x - d2;
-        const d5 = pos.y - d3;
-        const i = @intFromBool(d4 > d5);
-        const int1 = @intFromBool(!(d4 > d5));
-        const d6 = d4 - i + G2;
-        const d7 = d5 - int1 + G2;
-        const d8 = d4 - 1.0 + 2.0 * G2;
-        const d9 = d5 - 1.0 + 2.0 * G2;
-        const int2 = floor & 0xFF;
-        const int3 = floor1 & 0xFF;
-        const int4 = self.p(int2 + self.p(int3)) % 12;
-        const int5 = self.p(int2 + i + self.p(int3 + int1)) % 12;
-        const int6 = self.p(int2 + 1 + self.p(int3 + 1)) % 12;
-        const corner1 = getCornerNoise3D(int4, d4, d5, 0.0, 0.5);
-        const corner2 = getCornerNoise3D(int5, d6, d7, 0.0, 0.5);
-        const corner3 = getCornerNoise3D(int6, d8, d9, 0.0, 0.5);
-        return 70.0 * (corner1 + corner2 + corner3);
-    }
+const GRADIENT = [_]mf64.Vec3{
+    .new(1, 1, 0),
+    .new(-1, 1, 0),
+    .new(1, -1, 0),
+    .new(-1, -1, 0),
+    .new(1, 0, 1),
+    .new(-1, 0, 1),
+    .new(1, 0, -1),
+    .new(-1, 0, -1),
+    .new(0, 1, 1),
+    .new(0, -1, 1),
+    .new(0, 1, -1),
+    .new(0, -1, -1),
+    .new(1, 1, 0),
+    .new(0, -1, 1),
+    .new(-1, 1, 0),
+    .new(0, -1, -1),
 };
+
+offset: mf64.Vec3,
+permutation: [256]u8 = blk: {
+    var res: [256]u8 = undefined;
+    for (&res, 0..) |*item, i| item.* = i;
+    break :blk res;
+},
+
+pub fn init(rng_type: type, random: *rng.Rng(rng_type)) @This() {
+    var res: @This() = .{ .offset = .new(random.nextDouble() * 256.0, random.nextDouble() * 256.0, random.nextDouble() * 256.0) };
+    for (&res.permutation, 0..) |*item, i| {
+        const idx: u8 = @intCast(i);
+        const random_idx: u8 = @intCast(random.nextIntBounded(256 - @as(u9, idx)));
+        std.mem.swap(u8, item, &res.permutation[random_idx + idx]);
+    }
+    return res;
+}
+
+inline fn p(self: *const @This(), index: anytype) u8 {
+    return self.permutation[@as(usize, index & 0xff)];
+}
+
+fn getCornerNoise3D(gradientIndex: u8, pos: mf64.Vec3, offset: f64) f64 {
+    const d = offset - pos.length2();
+    return if (d < 0.0)
+        0.0
+    else
+        d * d * d * d * GRADIENT[gradientIndex].dot(pos);
+}
+
+pub fn getValue(self: *const @This(), pos: mf64.Vec2) f64 {
+    const F2 = 0.5 * (@sqrt(@as(f64, 3)) - 1.0);
+    const G2 = (3.0 - @sqrt(@as(f64, 3))) / 6.0;
+    const d = (pos.x + pos.y) * F2;
+    const floor = @floor(pos.x + d);
+    const floor1 = @floor(pos.y + d);
+    const d1 = (floor + floor1) * G2;
+    const d2 = floor - d1;
+    const d3 = floor1 - d1;
+    const d4 = pos.x - d2;
+    const d5 = pos.y - d3;
+    const i = @intFromBool(d4 > d5);
+    const int1 = @intFromBool(!(d4 > d5));
+    const d6 = d4 - i + G2;
+    const d7 = d5 - int1 + G2;
+    const d8 = d4 - 1.0 + 2.0 * G2;
+    const d9 = d5 - 1.0 + 2.0 * G2;
+    const int2 = floor & 0xFF;
+    const int3 = floor1 & 0xFF;
+    const int4 = self.p(int2 + self.p(int3)) % 12;
+    const int5 = self.p(int2 + i + self.p(int3 + int1)) % 12;
+    const int6 = self.p(int2 + 1 + self.p(int3 + 1)) % 12;
+    const corner1 = getCornerNoise3D(int4, d4, d5, 0.0, 0.5);
+    const corner2 = getCornerNoise3D(int5, d6, d7, 0.0, 0.5);
+    const corner3 = getCornerNoise3D(int6, d8, d9, 0.0, 0.5);
+    return 70.0 * (corner1 + corner2 + corner3);
+}

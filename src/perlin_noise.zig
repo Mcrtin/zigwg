@@ -3,7 +3,7 @@ const LegacyRng = @import("LegacyRng.zig");
 const rng = @import("rng.zig");
 const mf64 = @import("zlm").as(f64);
 const math = @import("math.zig");
-const noises = @import("simplex_noise.zig");
+const Simplex = @import("Simplex.zig");
 const NoiseData = @import("noise.zig").NoiseData;
 
 pub fn createLegacyForBlendedNoise(rng_type: type, random: *rng.Rng(rng_type), comptime octaves: []const i32) Perlin(octaves[octaves.len - 1] - octaves[0] + 1) {
@@ -41,7 +41,7 @@ fn makeAmplitudes(comptime sorted_octaves: []const i32) NoiseData {
 pub fn Perlin(octave_count: comptime_int) type {
     return struct {
         const lowestFreqValueFactor: f64 = (1 << octave_count - 1) / ((1 << octave_count) - 1);
-        noiseLevels: [octave_count]noises.ImprovedSimplex,
+        noiseLevels: [octave_count]Simplex.Improved,
         amplitudes: [octave_count]f64,
         lowestFreqInputFactor: f64,
         firstOctave: i32,
@@ -50,7 +50,7 @@ pub fn Perlin(octave_count: comptime_int) type {
             const firstOctave = noise_data.firstOctave;
             var amplitudes: [octave_count]f64 = undefined;
             @memcpy(&amplitudes, noise_data.amplitudes);
-            var noiseLevels: [octave_count]noises.ImprovedSimplex = undefined;
+            var noiseLevels: [octave_count]Simplex.Improved = undefined;
             if (useNewFactory) {
                 const rng_factory = random.forkPositional();
                 var fmt_buf: [32]u8 = undefined;
@@ -62,7 +62,7 @@ pub fn Perlin(octave_count: comptime_int) type {
                 std.debug.assert(firstOctave + octave_count <= 1);
                 var i1x = -firstOctave;
                 while (i1x >= 0) : (i1x -= 1) {
-                    const noise: noises.ImprovedSimplex = .init(rng_type, random);
+                    const noise: Simplex.Improved = .init(rng_type, random);
                     if (i1x < octave_count) noiseLevels[@intCast(i1x)] = noise;
                 }
             }
@@ -97,11 +97,11 @@ pub fn Perlin(octave_count: comptime_int) type {
         }
 
         pub fn maxBrokenValue(self: *const @This(), yMultiplier: f64) f64 {
-            return self.edgeValue(yMultiplier + noises.ImprovedSimplex.max_value);
+            return self.edgeValue(yMultiplier + Simplex.Improved.max_value);
         }
 
         pub fn maxValue(self: *const @This()) f64 {
-            return self.edgeValue(noises.ImprovedSimplex.max_value);
+            return self.edgeValue(Simplex.Improved.max_value);
         }
 
         fn edgeValue(self: *const @This(), noise: f64) f64 {
@@ -116,7 +116,7 @@ pub fn Perlin(octave_count: comptime_int) type {
             return res;
         }
 
-        pub fn getOctaveNoise(self: *const @This(), octave: i32) noises.ImprovedSimplex {
+        pub fn getOctaveNoise(self: *const @This(), octave: i32) Simplex.Improved {
             return self.noiseLevels[octave_count - 1 - octave];
         }
     };
@@ -133,14 +133,14 @@ pub fn initPerlinSimplex(rng_type: type, random: rng.Rng(rng_type), comptime oct
     const last = octaves[octaves.len - 1];
     const len = last - octaves[0] + 1;
 
-    const simplexNoise = noises.Simplex.init(rng_type, random);
-    var noiseLevels: [len]?noises.Simplex = @splat(null);
+    const simplexNoise = Simplex.init(rng_type, random);
+    var noiseLevels: [len]?Simplex = @splat(null);
     if (0 <= last and last < len and std.mem.containsAtLeastScalar(i32, octaves, 1, 0)) {
         noiseLevels[last] = simplexNoise;
     }
 
     for (last + 1..len) |curr| {
-        const noise = noises.Simplex.init(rng_type, random);
+        const noise = Simplex.init(rng_type, random);
         if (curr >= 0 and std.mem.containsAtLeastScalar(i32, octaves, 1, last - curr))
             noiseLevels[curr] = noise;
     }
@@ -149,7 +149,7 @@ pub fn initPerlinSimplex(rng_type: type, random: rng.Rng(rng_type), comptime oct
     const curr_random = LegacyRng.init(@bitCast(l));
     var curr = last - 1;
     while (curr >= 0) : (curr -= 1) {
-        const noise = noises.Simplex.init(curr_random, .init(curr_random));
+        const noise = Simplex.init(curr_random, .init(curr_random));
         if (curr < len and std.mem.containsAtLeastScalar(i32, octaves, 1, last - curr))
             noiseLevels[curr] = noise;
     }
@@ -161,7 +161,7 @@ pub fn initPerlinSimplex(rng_type: type, random: rng.Rng(rng_type), comptime oct
 pub fn PerlinSimplex(octave_count: comptime_int) type {
     return struct {
         const highestFreqValueFactor: f64 = 1 / ((1 << octave_count) - 1.0);
-        noiseLevels: [octave_count]?noises.Simplex,
+        noiseLevels: [octave_count]?Simplex,
         highestFreqInputFactor: f64,
 
         pub fn getValue(self: *const @This(), pos: mf64.Vec2, useNoiseOffsets: bool) f64 {

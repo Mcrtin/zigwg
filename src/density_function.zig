@@ -9,6 +9,8 @@ const XoroshiroRng = @import("XoroshiroRng.zig");
 const std = @import("std");
 const noises = @import("noise.zig");
 const Id = []const u8;
+const Simplex = @import("Simplex.zig");
+
 pub const Position = struct {
     x: i32,
     y: i32,
@@ -62,10 +64,54 @@ pub fn evalDensityFunction(comptime df_val: mcg.worldgen.density_function.Densit
     }
 }
 
+pub fn Interpolator(comptime cell_width: u5, comptime cell_height: u5) type {
+    return struct {
+        data: [2][@divExact(16, cell_width) + 1][@divExact(16, cell_height) + 1]f64 = @splat(@splat(@splat(0))),
+
+        pub fn compute(self: *@This(), comptime df_val: mcg.worldgen.density_function.DensityF, pos: Position, ctx: anytype) f64 {
+            const x: std.math.IntFittingRange(0, 16 + 1) = @intCast(pos.x - (ctx.chunk_pos.x << 4));
+            const y: std.math.IntFittingRange(0, cell_height) = @intCast(@mod(pos.y, cell_height));
+            const z: std.math.IntFittingRange(0, cell_width) = @intCast(pos.z - @mod(ctx.chunk_pos.z << 4, cell_width));
+
+            if (x == 0 and y == 0 and z == 0) {
+                for (&self.data[1], 0..) |*zslice, zo| {
+                    for (zslice, 0..) |*val, yo| {
+                        val.* = evalDensityFunction(df_val, .{ .x = pos.x, .y = ctx.min_y + @as(u31, @intCast(yo)) * @as(i32, cell_height), .z = (ctx.chunk_pos.z << 4) + @as(u31, @intCast(zo)) * cell_width }, ctx);
+                    }
+                }
+            }
+            if (@as(u1, @truncate(x)) == 0 and y == 0 and z == 0) {
+                self.data[0] = self.data[1];
+
+                for (&self.data[1], 0..) |*zslice, zo| {
+                    for (zslice, 0..) |*val, yo| {
+                        val.* = evalDensityFunction(df_val, .{ .x = pos.x + cell_width, .y = ctx.min_y + @as(u31, @intCast(yo)) * @as(i32, cell_height), .z = (ctx.chunk_pos.z << 4) + @as(u31, @intCast(zo)) * cell_width }, ctx);
+                    }
+                }
+            }
+            return math.lerp3(
+                @floatFromInt(pos.y), //TODO
+                @floatFromInt(pos.x),
+                @floatFromInt(pos.z),
+                self.data[0][z][y],
+                self.data[0][z][y + 1],
+                self.data[1][z][y],
+                self.data[1][z][y + 1],
+                self.data[0][z + 1][y],
+                self.data[0][z + 1][y + 1],
+                self.data[1][z + 1][y],
+                self.data[1][z + 1][y + 1],
+            );
+            // return evalDensityFunction(df_val, pos, ctx);
+        }
+    };
+}
+
 fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos: Position, ctx: anytype) f64 {
     switch (df.*) {
         .@"minecraft:interpolated" => |val| {
-            return evalDensityFunction(val.argument, pos, ctx);
+            var interpolator = ctx.interpolator;
+            return interpolator.compute(val.argument, pos, ctx);
         },
         .@"minecraft:cache_2d" => |val| {
             return evalDensityFunction(val.argument, pos, ctx);
@@ -207,7 +253,38 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
             return @floatCast(evalSpline(val.spline, pos, ctx));
         },
         .@"minecraft:end_islands" => {
-            @compileError("TODO");
+            const ISLAND_THRESHOLD = -0.9;
+            const noise: Simplex = blk: {
+                var random: rng.Rng(LegacyRng) = .init(.init(0));
+                random.consumeCount(17292);
+                break :blk .init(LegacyRng, &random);
+            };
+
+            const x = pos.x / 8;
+            const z = pos.z / 8;
+
+            const i = x / 2;
+            const i1_ = z / 2;
+            const i2_ = x % 2;
+            const i3_ = z % 2;
+            var f = 100 - @sqrt(@as(f32, @floatFromInt(x * x + z * z))) * 8;
+            f = std.math.clamp(f, -100, 80);
+
+            for (-12..13) |i4_| {
+                for (-12..13) |i5_| {
+                    const l: i64 = i + i4_;
+                    const l1: i64 = i1_ + i5_;
+                    if (l * l + l1 * l1 > 4096 and noise.getValue(.new(l, l1)) < ISLAND_THRESHOLD) {
+                        const f1 = (@abs(@as(f32, @floatFromInt(l))) * 3439 + @abs(@as(f32, @floatFromInt(l1))) * 147) % 13 + 9;
+                        const f2: f32 = @floatFromInt(i2_ - i4_ * 2);
+                        const f3: f32 = @floatFromInt(i3_ - i5_ * 2);
+                        const f4 = 100 - @sqrt(f2 * f2 + f3 * f3) * f1;
+                        f4 = std.math.clamp(f4, -100, 80);
+                        f = @max(f, f4);
+                    }
+                }
+            }
+            return (f - 8) / 128;
         },
     }
 }
