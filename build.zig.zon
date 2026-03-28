@@ -34,7 +34,7 @@
     .dependencies = .{
         .mcgen = .{
             .url = "./mcgen",
-            .hash = "N-V-__8AAMC3RQBVpLgxDAWoyEC-dxMEGFG82u5D_6nu-xQe",
+            .hash = "N-V-__8AAETrRABnDPjM773yGSbekjCWaH5KUsz6PsI7r3FA",
         },
         .zlm = .{
             .url = "git+https://github.com/ziglibs/zlm#35ab7df57cfb5392a11486f6e4b03a82f849a118",

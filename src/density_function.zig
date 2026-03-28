@@ -58,7 +58,7 @@ pub fn evalDensityFunction(comptime df_val: mcg.worldgen.density_function.Densit
     switch (df_val) {
         .object => |df| return evalDf(df, pos, ctx),
         .number => |n| return n,
-        .string => |s| return evalDensityFunction(comptime meta.getFromRegistryT(mcg.worldgen.density_function.DensityF, mcg.worldgen.density_function, s), pos, ctx),
+        .string => |s| return evalDensityFunction(@field(mcg.worldgen.density_function, s), pos, ctx),
     }
 }
 
@@ -212,9 +212,7 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
     }
 }
 fn evalNoise(comptime noise_name: Id, pos: NoisePosition, ctx: anytype) f64 {
-    if (comptime !std.mem.startsWith(u8, noise_name, "minecraft:")) @compileError("unsupported string " ++ noise_name);
-    const noise = getNoise(ctx.noise_holder, noise_name["minecraft:".len..]);
-    return noise.getValue(pos);
+    return getNoise(ctx.noise_holder, noise_name).getValue(pos);
 }
 
 fn evalSpline(comptime val: mcg.worldgen.density_function.SplineValue, pos: Position, ctx: anytype) f32 {

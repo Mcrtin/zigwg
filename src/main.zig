@@ -32,7 +32,7 @@ pub const Parameter = struct {
 
 pub fn main() !void {
     const seed = 1;
-    const settings = mcg.worldgen.noise_settings.overworld;
+    const settings = mcg.worldgen.noise_settings.@"minecraft:overworld";
     var random = if (settings.legacy_random_source) rng.Rng(LegacyRng).init(.init(seed)) else rng.Rng(XoroshiroRng).init(.fromSeed(seed));
     const rng_factory = random.forkPositional();
     const x: i32 = 0;
