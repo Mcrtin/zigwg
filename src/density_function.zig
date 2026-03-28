@@ -10,12 +10,8 @@ const std = @import("std");
 const noises = @import("noise.zig");
 const Id = []const u8;
 const Simplex = @import("Simplex.zig");
+const Pos = @import("position.zig");
 
-pub const Position = struct {
-    x: i32,
-    y: i32,
-    z: i32,
-};
 pub const NoisePosition = mf64.Vec3;
 
 const NoiseHolder = makeNoiseHolderType(mcg.worldgen.noise);
@@ -45,8 +41,7 @@ fn makeNoiseHolderType(comptime noise_data: type) type {
 
 pub fn initNoiseHolder(noise_data: type, rng_type: type, rng_factory: rng.Factory(rng_type)) NoiseHolder {
     var res: NoiseHolder = undefined;
-    // const decls = @typeInfo(noise_data).@"struct".decls;
-    inline for (@typeInfo(@TypeOf(res)).@"struct".fields) |curr| {
+    inline for (@typeInfo(@TypeOf(res)).@"struct".decls) |curr| {
         var random = rng_factory.fromHashOf("minecraft:" ++ curr.name);
         @field(res, curr.name) = .init(rng_type, &random, @field(noise_data, curr.name), true);
     }
@@ -56,7 +51,7 @@ pub fn getNoise(noise_holder: anytype, comptime name: []const u8) noises.NormalN
     return @field(noise_holder, name);
 }
 
-pub fn evalDensityFunction(comptime df_val: mcg.worldgen.density_function.DensityF, pos: Position, ctx: anytype) f64 {
+pub fn evalDensityFunction(comptime df_val: mcg.worldgen.density_function.DensityF, pos: Pos.Block, ctx: anytype) f64 {
     switch (df_val) {
         .object => |df| return evalDf(df, pos, ctx),
         .number => |n| return n,
@@ -64,35 +59,48 @@ pub fn evalDensityFunction(comptime df_val: mcg.worldgen.density_function.Densit
     }
 }
 
-pub fn Interpolator(comptime cell_width: u5, comptime cell_height: u5) type {
+pub fn Interpolator(comptime cell_width: u5, comptime cell_height: u5, comptime chunk_height: Pos.Height) type {
     return struct {
-        data: [2][@divExact(16, cell_width) + 1][@divExact(16, cell_height) + 1]f64 = @splat(@splat(@splat(0))),
+        const z_cells_per_chunk = @divExact(Pos.Chunk.Resolution, cell_width);
+        const y_cells_per_chunk = @divExact(chunk_height, @as(Pos.Height, cell_height));
+        data: [2][z_cells_per_chunk + 1][y_cells_per_chunk + 1]f64 = @splat(@splat(@splat(0))),
 
-        pub fn compute(self: *@This(), comptime df_val: mcg.worldgen.density_function.DensityF, pos: Position, ctx: anytype) f64 {
-            const x: std.math.IntFittingRange(0, 16 + 1) = @intCast(pos.x - (ctx.chunk_pos.x << 4));
-            const y: std.math.IntFittingRange(0, cell_height) = @intCast(@mod(pos.y, cell_height));
-            const z: std.math.IntFittingRange(0, cell_width) = @intCast(pos.z - @mod(ctx.chunk_pos.z << 4, cell_width));
-
-            if (x == 0 and y == 0 and z == 0) {
+        pub fn compute(self: *@This(), comptime df_val: mcg.worldgen.density_function.DensityF, pos: Pos.Block, ctx: anytype) f64 {
+            const chunk_block = pos.chunkBlock();
+            const chunk = pos.column.chunk();
+            const x = chunk_block.column.x;
+            const y: std.math.IntFittingRange(0, y_cells_per_chunk) = @intCast(@divTrunc(chunk_block.y - ctx.min_y, cell_height));
+            const z: std.math.IntFittingRange(0, z_cells_per_chunk) = @intCast(@divTrunc(chunk_block.column.z, cell_width));
+            if (chunk_block.column.x == 0 and chunk_block.y == ctx.max_y - 1 and chunk_block.column.z == 0) {
                 for (&self.data[1], 0..) |*zslice, zo| {
                     for (zslice, 0..) |*val, yo| {
-                        val.* = evalDensityFunction(df_val, .{ .x = pos.x, .y = ctx.min_y + @as(u31, @intCast(yo)) * @as(i32, cell_height), .z = (ctx.chunk_pos.z << 4) + @as(u31, @intCast(zo)) * cell_width }, ctx);
+                        const p: Pos.Block = .init(
+                            chunk.x + x,
+                            ctx.min_y + @as(u11, @intCast(yo)) * @as(i12, cell_height),
+                            chunk.z + z + @as(u25, @intCast(zo)) * @as(i26, cell_width),
+                        );
+                        val.* = evalDensityFunction(df_val, p, ctx);
                     }
                 }
             }
-            if (@as(u1, @truncate(x)) == 0 and y == 0 and z == 0) {
+            if (chunk_block.y == ctx.max_y - 1 and chunk_block.column.z == 0) {
                 self.data[0] = self.data[1];
 
                 for (&self.data[1], 0..) |*zslice, zo| {
                     for (zslice, 0..) |*val, yo| {
-                        val.* = evalDensityFunction(df_val, .{ .x = pos.x + cell_width, .y = ctx.min_y + @as(u31, @intCast(yo)) * @as(i32, cell_height), .z = (ctx.chunk_pos.z << 4) + @as(u31, @intCast(zo)) * cell_width }, ctx);
+                        const p: Pos.Block = .init(
+                            chunk.x + x,
+                            ctx.min_y + @as(u11, @intCast(yo)) * @as(i12, cell_height),
+                            chunk.z + z + @as(u25, @intCast(zo)) * @as(i26, cell_width),
+                        );
+                        val.* = evalDensityFunction(df_val, p, ctx);
                     }
                 }
             }
             return math.lerp3(
-                @floatFromInt(pos.y), //TODO
-                @floatFromInt(pos.x),
-                @floatFromInt(pos.z),
+                @as(f64, @floatFromInt(@mod(pos.y, cell_height))) / cell_height, //TODO
+                @as(f64, @floatFromInt(@mod(pos.column.x, cell_width))) / cell_width,
+                @as(f64, @floatFromInt(@mod(pos.column.z, cell_width))) / cell_width,
                 self.data[0][z][y],
                 self.data[0][z][y + 1],
                 self.data[1][z][y],
@@ -107,7 +115,7 @@ pub fn Interpolator(comptime cell_width: u5, comptime cell_height: u5) type {
     };
 }
 
-fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos: Position, ctx: anytype) f64 {
+fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos: Pos.Block, ctx: anytype) f64 {
     switch (df.*) {
         .@"minecraft:interpolated" => |val| {
             var interpolator = ctx.interpolator;
@@ -132,7 +140,7 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
             return 0.0;
         },
         .@"minecraft:old_blended_noise" => |val| {
-            return ctx.blended_noise.compute(.new(@floatFromInt(pos.x), @floatFromInt(pos.y), @floatFromInt(pos.z)), val.xz_scale, val.y_scale, val.xz_factor, val.y_factor, val.smear_scale_multiplier);
+            return ctx.blended_noise.compute(.new(@floatFromInt(pos.column.x), @floatFromInt(pos.y), @floatFromInt(pos.column.z)), val.xz_scale, val.y_scale, val.xz_factor, val.y_factor, val.smear_scale_multiplier);
         },
         .@"minecraft:range_choice" => |val| {
             const cond = evalDensityFunction(val.input, pos, ctx);
@@ -145,7 +153,7 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
             return std.math.clamp(evalDensityFunction(val.input, pos, ctx), val.min, val.max);
         },
         .@"minecraft:noise" => |val| {
-            var noise_pos: NoisePosition = .new(@floatFromInt(pos.x), @floatFromInt(pos.y), @floatFromInt(pos.z));
+            var noise_pos: NoisePosition = .new(@floatFromInt(pos.column.x), @floatFromInt(pos.y), @floatFromInt(pos.column.z));
             noise_pos.x *= val.xz_scale;
             noise_pos.y *= val.y_scale;
             noise_pos.z *= val.xz_scale;
@@ -213,14 +221,14 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
                 1.5
             else
                 2.0) else @compileError("unsupported rarity value mapper " ++ val.rarity_value_mapper);
-            var noise_pos: NoisePosition = .new(@floatFromInt(pos.x), @floatFromInt(pos.y), @floatFromInt(pos.z));
+            var noise_pos: NoisePosition = .new(@floatFromInt(pos.column.x), @floatFromInt(pos.y), @floatFromInt(pos.column.z));
             noise_pos.x /= mapped;
             noise_pos.y /= mapped;
             noise_pos.z /= mapped;
             return mapped * @abs(evalNoise(val.noise, noise_pos, ctx));
         },
         .@"minecraft:shifted_noise" => |val| {
-            var noise_pos: NoisePosition = .new(@floatFromInt(pos.x), @floatFromInt(pos.y), @floatFromInt(pos.z));
+            var noise_pos: NoisePosition = .new(@floatFromInt(pos.column.x), @floatFromInt(pos.y), @floatFromInt(pos.column.z));
             noise_pos.x *= val.xz_scale;
             noise_pos.y *= val.y_scale;
             noise_pos.z *= val.xz_scale;
@@ -244,10 +252,10 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
             return @floatFromInt(std.math.maxInt(i32));
         },
         .@"minecraft:shift_a" => |val| {
-            return evalNoise(val.argument, .{ .x = @floatFromInt(pos.x), .y = 0, .z = @floatFromInt(pos.z) }, ctx);
+            return evalNoise(val.argument, .{ .x = @floatFromInt(pos.column.x), .y = 0, .z = @floatFromInt(pos.column.z) }, ctx);
         },
         .@"minecraft:shift_b" => |val| {
-            return evalNoise(val.argument, .{ .x = @floatFromInt(pos.z), .y = @floatFromInt(pos.x), .z = 0 }, ctx);
+            return evalNoise(val.argument, .{ .x = @floatFromInt(pos.column.z), .y = @floatFromInt(pos.column.x), .z = 0 }, ctx);
         },
         .@"minecraft:spline" => |val| {
             return @floatCast(evalSpline(val.spline, pos, ctx));
@@ -292,7 +300,7 @@ fn evalNoise(comptime noise_name: Id, pos: NoisePosition, ctx: anytype) f64 {
     return getNoise(ctx.noise_holder, noise_name).getValue(pos);
 }
 
-fn evalSpline(comptime val: mcg.worldgen.density_function.SplineValue, pos: Position, ctx: anytype) f32 {
+fn evalSpline(comptime val: mcg.worldgen.density_function.SplineValue, pos: Pos.Block, ctx: anytype) f32 {
     switch (val) {
         .object => |spline| {
             const points = spline.points;

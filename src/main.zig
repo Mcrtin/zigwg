@@ -4,6 +4,7 @@ const rng = @import("rng.zig");
 const meta = @import("meta.zig");
 const mf64 = @import("zlm").as(f64);
 const math = @import("math.zig");
+const Pos = @import("position.zig");
 
 const LegacyRng = @import("LegacyRng.zig");
 const XoroshiroRng = @import("XoroshiroRng.zig");
@@ -35,13 +36,12 @@ pub fn main() !void {
     const settings = mcg.worldgen.noise_settings.@"minecraft:overworld";
     var random = if (settings.legacy_random_source) rng.Rng(LegacyRng).init(.init(seed)) else rng.Rng(XoroshiroRng).init(.fromSeed(seed));
     const rng_factory = random.forkPositional();
-    const x: i32 = 0;
-    const z: i32 = 0;
+    const chunk_pos: Pos.Chunk = .init(0, 0);
 
-    const firstNoiseXBlock = x;
-    const firstNoiseZBlock = z;
-    const cellWidth: u31 = comptime @intCast(quartToBlock(settings.noise.size_horizontal));
-    const cellHeight: u31 = comptime @intCast(quartToBlock(settings.noise.size_vertical));
+    const firstNoiseXBlock = chunk_pos.x;
+    const firstNoiseZBlock = chunk_pos.z;
+    const cellWidth: u5 = comptime @intCast(quartToBlock(settings.noise.size_horizontal));
+    const cellHeight: u5 = comptime @intCast(quartToBlock(settings.noise.size_vertical));
     const cellCountXZ = 16 / cellWidth;
     const cellCountY = @divFloor(settings.noise.height, cellHeight);
     _ = cellCountY; // autofix
@@ -74,11 +74,21 @@ pub fn main() !void {
     // }
 
     var blended_random = if (settings.legacy_random_source) rng.Rng(LegacyRng).init(.init(seed)) else rng_factory.fromHashOf("minecraft:terrain");
-    const blended_noise = noises.Blended.create(if (settings.legacy_random_source) LegacyRng else XoroshiroRng, &blended_random);
     const rng_type = if (settings.legacy_random_source) LegacyRng else XoroshiroRng;
     const noise_holder = density_function.initNoiseHolder(mcg.worldgen.noise, rng_type, rng_factory);
+    const blended_noise = noises.Blended.create(rng_type, &blended_random);
+    const context = .{
+        .settings = settings,
+        .noise_holder = noise_holder,
+        .blended_noise = blended_noise,
+        .interpolator = density_function.Interpolator(cellWidth, cellHeight, @intCast(settings.noise.height)){},
+        .chunk_pos = chunk_pos,
+        .min_y = settings.noise.min_y,
+        .max_y = settings.noise.min_y + settings.noise.height,
+    };
 
-    const val = density_function.evalDensityFunction(settings.noise_router.final_density, .{ .x = x * 16, .y = 0, .z = z * 16 }, .{ .settings = settings, .noise_holder = noise_holder, .blended_noise = blended_noise, .interpolator = density_function.Interpolator(cellWidth, cellHeight){}, .chunk_pos = .{ .x = x, .z = z }, .min_y = settings.noise.min_y });
+    _ = density_function.evalDensityFunction(settings.noise_router.final_density, chunk_pos.block(.init(0, context.max_y - 1, 0)), context);
+    const val = density_function.evalDensityFunction(settings.noise_router.final_density, chunk_pos.block(.init(0, 0, 0)), context);
     std.debug.print("final_density: {d}\n", .{val});
 }
 
