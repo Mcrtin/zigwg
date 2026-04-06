@@ -4,12 +4,10 @@ const rng = @import("rng.zig");
 const meta = @import("meta.zig");
 const mf64 = @import("zlm").as(f64);
 const math = @import("math.zig");
-const LegacyRng = @import("LegacyRng.zig");
-const XoroshiroRng = @import("XoroshiroRng.zig");
 const std = @import("std");
 const noises = @import("noise.zig");
 const Id = []const u8;
-const Simplex = @import("Simplex.zig");
+const Simplex = @import("noise.zig").Simplex;
 const Pos = @import("position.zig");
 
 pub const NoisePosition = mf64.Vec3;
@@ -63,44 +61,32 @@ pub fn Interpolator(comptime cell_width: u5, comptime cell_height: u5, comptime 
     return struct {
         const z_cells_per_chunk = @divExact(Pos.Chunk.Resolution, cell_width);
         const y_cells_per_chunk = @divExact(chunk_height, @as(Pos.Height, cell_height));
+        const cell_to_block: Pos.Block = .init(cell_width, cell_height, cell_width);
+
         data: [2][z_cells_per_chunk + 1][y_cells_per_chunk + 1]f64 = @splat(@splat(@splat(0))),
 
         pub fn compute(self: *@This(), comptime df_val: mcg.worldgen.density_function.DensityF, pos: Pos.Block, ctx: anytype) f64 {
             const chunk_block = pos.chunkBlock();
-            const chunk = pos.column.chunk();
-            const x = chunk_block.column.x;
-            const y: std.math.IntFittingRange(0, y_cells_per_chunk) = @intCast(@divTrunc(chunk_block.y - ctx.min_y, cell_height));
-            const z: std.math.IntFittingRange(0, z_cells_per_chunk) = @intCast(@divTrunc(chunk_block.column.z, cell_width));
-            if (chunk_block.column.x == 0 and chunk_block.y == ctx.max_y - 1 and chunk_block.column.z == 0) {
-                for (&self.data[1], 0..) |*zslice, zo| {
-                    for (zslice, 0..) |*val, yo| {
-                        const p: Pos.Block = .init(
-                            chunk.x + x,
-                            ctx.min_y + @as(u11, @intCast(yo)) * @as(i12, cell_height),
-                            chunk.z + z + @as(u25, @intCast(zo)) * @as(i26, cell_width),
-                        );
-                        val.* = evalDensityFunction(df_val, p, ctx);
+            if (chunk_block.column.x % cell_width == 0 and chunk_block.y == ctx.max_y - 1 and chunk_block.column.z == 0) {
+                for (0..if (chunk_block.column.x == 0) 2 else 1) |_| {
+                    self.data[0] = self.data[1];
+                    for (&self.data[1], 0..) |*zslice, zo| {
+                        for (zslice, 0..) |*val, yo| {
+                            const origin = pos.column.chunk().origin().block(ctx.min_y);
+                            const offset: Pos.Block = .init(@divExact(chunk_block.column.x, cell_width), @intCast(yo), @intCast(zo));
+                            const p = origin.add(offset.mul(cell_to_block) catch unreachable) catch unreachable;
+                            val.* = evalDensityFunction(df_val, p, ctx);
+                        }
                     }
                 }
             }
-            if (chunk_block.y == ctx.max_y - 1 and chunk_block.column.z == 0) {
-                self.data[0] = self.data[1];
 
-                for (&self.data[1], 0..) |*zslice, zo| {
-                    for (zslice, 0..) |*val, yo| {
-                        const p: Pos.Block = .init(
-                            chunk.x + x,
-                            ctx.min_y + @as(u11, @intCast(yo)) * @as(i12, cell_height),
-                            chunk.z + z + @as(u25, @intCast(zo)) * @as(i26, cell_width),
-                        );
-                        val.* = evalDensityFunction(df_val, p, ctx);
-                    }
-                }
-            }
-            return math.lerp3(
-                @as(f64, @floatFromInt(@mod(pos.y, cell_height))) / cell_height, //TODO
-                @as(f64, @floatFromInt(@mod(pos.column.x, cell_width))) / cell_width,
-                @as(f64, @floatFromInt(@mod(pos.column.z, cell_width))) / cell_width,
+            const y = @divFloor(@as(u12, @intCast(chunk_block.y - ctx.min_y)), cell_height);
+            const z = @divFloor(chunk_block.column.z, cell_width);
+            const val = math.lerp3(
+                modNorm(pos.y, cell_height),
+                modNorm(pos.column.x, cell_width),
+                modNorm(pos.column.z, cell_width),
                 self.data[0][z][y],
                 self.data[0][z][y + 1],
                 self.data[1][z][y],
@@ -110,7 +96,10 @@ pub fn Interpolator(comptime cell_width: u5, comptime cell_height: u5, comptime 
                 self.data[1][z + 1][y],
                 self.data[1][z + 1][y + 1],
             );
-            // return evalDensityFunction(df_val, pos, ctx);
+            return val;
+        }
+        fn modNorm(numerator: anytype, denominator: anytype) f64 {
+            return @as(f64, @floatFromInt(@mod(numerator, denominator))) / @as(f64, @floatFromInt(denominator));
         }
     };
 }
@@ -118,8 +107,20 @@ pub fn Interpolator(comptime cell_width: u5, comptime cell_height: u5, comptime 
 fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos: Pos.Block, ctx: anytype) f64 {
     switch (df.*) {
         .@"minecraft:interpolated" => |val| {
-            var interpolator = ctx.interpolator;
-            return interpolator.compute(val.argument, pos, ctx);
+            var idx: usize = undefined;
+            for (ctx.interpolator.density_functions[0..ctx.interpolator.count.*], 0..) |df_, i| {
+                if (std.meta.eql(df_, val.argument)) {
+                    idx = i;
+                    break;
+                }
+            } else {
+                idx = ctx.interpolator.count.*;
+                std.debug.assert(idx < 10);
+                ctx.interpolator.count.* += 1;
+                ctx.interpolator.density_functions[idx] = val.argument;
+                ctx.interpolator.interpolators[idx] = .{};
+            }
+            return ctx.interpolator.interpolators[idx].compute(val.argument, pos, ctx);
         },
         .@"minecraft:cache_2d" => |val| {
             return evalDensityFunction(val.argument, pos, ctx);
@@ -144,10 +145,11 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
         },
         .@"minecraft:range_choice" => |val| {
             const cond = evalDensityFunction(val.input, pos, ctx);
-            return if (val.min_inclusive <= cond and cond < val.max_exclusive)
-                evalDensityFunction(val.when_in_range, pos, ctx)
+            const function = if (val.min_inclusive <= cond and cond < val.max_exclusive)
+                val.when_in_range
             else
-                evalDensityFunction(val.when_out_of_range, pos, ctx);
+                val.when_out_of_range;
+            evalDensityFunction(function, pos, ctx);
         },
         .@"minecraft:clamp" => |val| {
             return std.math.clamp(evalDensityFunction(val.input, pos, ctx), val.min, val.max);
@@ -263,9 +265,9 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
         .@"minecraft:end_islands" => {
             const ISLAND_THRESHOLD = -0.9;
             const noise: Simplex = blk: {
-                var random: rng.Rng(LegacyRng) = .init(.init(0));
+                var random: rng.Rng(rng.Legacy) = .init(.init(0));
                 random.consumeCount(17292);
-                break :blk .init(LegacyRng, &random);
+                break :blk .init(rng.Legacy, &random);
             };
 
             const x = pos.x / 8;

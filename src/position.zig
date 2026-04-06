@@ -52,11 +52,23 @@ pub const Block = packed struct {
         const y: i64 = @as(i13, self.y) - @as(i13, other.y);
         return x * x + y * y + z * z;
     }
-    pub fn relative(self: @This(), other: @This()) !@This() {
+    pub fn sub(self: @This(), other: @This()) !@This() {
         return .{ .column = .init(
             try std.math.sub(XZ, self.column.x, other.column.x),
             try std.math.sub(XZ, self.column.z, other.column.z),
         ), .y = try std.math.sub(Y, self.y, other.y) };
+    }
+    pub fn add(self: @This(), other: @This()) !@This() {
+        return .{ .column = .init(
+            try std.math.add(XZ, self.column.x, other.column.x),
+            try std.math.add(XZ, self.column.z, other.column.z),
+        ), .y = try std.math.add(Y, self.y, other.y) };
+    }
+    pub fn mul(self: @This(), other: @This()) !@This() {
+        return .{ .column = .init(
+            try std.math.mul(XZ, self.column.x, other.column.x),
+            try std.math.mul(XZ, self.column.z, other.column.z),
+        ), .y = try std.math.mul(Y, self.y, other.y) };
     }
 };
 
@@ -65,7 +77,7 @@ pub const Section = packed struct {
     chunk: Chunk,
     y: @This().Y,
     pub fn block(self: @This(), pos: @This().Block) position.Block {
-        return .{ .column = self.chunk.column(pos.column), .y = @as(position.Y, self.y * Chunk.Resolution) + @as(position.Y, pos.y) };
+        return .{ .column = self.chunk.column(pos.column), .y = @as(position.Y, self.y) * Chunk.Resolution + @as(position.Y, pos.y) };
     }
     pub const Block = packed struct {
         column: Chunk.Column,
@@ -101,11 +113,11 @@ pub const Chunk = packed struct {
     }
 
     pub fn center(self: @This()) position.Column {
-        return self.column(.new(8, 8));
+        return self.column(.init(8, 8));
     }
 
     pub fn origin(self: @This()) position.Column {
-        return self.column(.new(0, 0));
+        return self.column(.init(0, 0));
     }
 
     pub const Column = packed struct {

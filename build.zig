@@ -36,6 +36,10 @@ pub fn build(b: *std.Build) void {
 
     const zlm_dep = b.dependency("zlm", .{});
     const zlm_mod = zlm_dep.module("zlm");
+
+    const nbt = b.dependency("zignbt", .{});
+    const nbt_mod = nbt.module("zignbt");
+
     // This creates a module, which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
     // Zig modules are the preferred way of making Zig code available to consumers.
@@ -97,6 +101,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "zigwg", .module = mod },
                 .{ .name = "mc-generated", .module = gen_mod },
                 .{ .name = "zlm", .module = zlm_mod },
+                .{ .name = "nbt", .module = nbt_mod },
             },
         }),
     });
@@ -146,9 +151,7 @@ pub fn build(b: *std.Build) void {
     // Creates an executable that will run `test` blocks from the executable's
     // root module. Note that test executables only test one module at a time,
     // hence why we have to create two separate ones.
-    const exe_tests = b.addTest(.{
-        .root_module = exe.root_module,
-    });
+    const exe_tests = b.addTest(.{ .root_module = exe.root_module });
 
     // A run step that will run the second test executable.
     const run_exe_tests = b.addRunArtifact(exe_tests);

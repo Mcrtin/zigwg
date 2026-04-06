@@ -30,8 +30,8 @@ pub fn lerp3(delta1: f64, delta2: f64, delta3: f64, start1: f64, end1: f64, star
     return lerp(delta3, lerp2(delta1, delta2, start1, end1, start2, end2), lerp2(delta1, delta2, start3, end3, start4, end4));
 }
 
-pub fn range(T: type, comptime start: T, comptime end: T) [end - start]T {
-    var buf: [end - start]T = undefined;
+pub fn range(comptime T: type, comptime start: T, comptime end_inclusive: T) [@as(usize, end_inclusive - start) + 1]T {
+    var buf: [@as(usize, end_inclusive - start) + 1]T = undefined;
     for (&buf, 0..) |*item, i| item.* = @as(T, @intCast(i)) + start;
     return buf;
 }

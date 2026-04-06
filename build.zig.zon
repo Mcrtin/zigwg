@@ -34,7 +34,7 @@
     .dependencies = .{
         .mcgen = .{
             .url = "./mcgen",
-            .hash = "N-V-__8AAELrRACmcKStLafw6eb2pui0G1xuZAI2XcEBF9-T",
+            .hash = "N-V-__8AACijUACuzrQjEfKEovV-u1UFqqNkMGpx-w_2AtkU",
         },
         .zlm = .{
             .url = "git+https://github.com/ziglibs/zlm#35ab7df57cfb5392a11486f6e4b03a82f849a118",
@@ -43,6 +43,10 @@
         .mcdata = .{
             .url = "git+https://github.com/Mcrtin/zigmcdata#c3afa34ebe61d6d76e7d545e6f297caa5584c56a",
             .hash = "zigmcdata-0.0.0-bN5yujSqAADn0tkvJC-07vL0keShU0BTseQN8B2g-wsU",
+        },
+        .zignbt = .{
+            .url = "git+https://github.com/Mcrtin/zignbt#a90684df4d41d6d458e6b366a6a2cce048430eda",
+            .hash = "zignbt-0.0.0-rCb47uEaAQBragNIIT1om-c0_XsgS2eto783Xm0vqEfs",
         },
     },
     .paths = .{
