@@ -10,7 +10,7 @@ const Id = []const u8;
 const Simplex = @import("noise.zig").Simplex;
 const Pos = @import("position.zig");
 
-pub const NoisePosition = mf64.Vec3;
+pub const NoisePosition = noises.Position;
 
 const NoiseHolder = makeNoiseHolderType(mcg.worldgen.noise);
 fn makeNoiseHolderType(comptime noise_data: type) type {
@@ -145,20 +145,16 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
         },
         .@"minecraft:range_choice" => |val| {
             const cond = evalDensityFunction(val.input, pos, ctx);
-            const function = if (val.min_inclusive <= cond and cond < val.max_exclusive)
-                val.when_in_range
+            if (val.min_inclusive <= cond and cond < val.max_exclusive)
+                return evalDensityFunction(val.when_in_range, pos, ctx)
             else
-                val.when_out_of_range;
-            evalDensityFunction(function, pos, ctx);
+                return evalDensityFunction(val.when_out_of_range, pos, ctx);
         },
         .@"minecraft:clamp" => |val| {
             return std.math.clamp(evalDensityFunction(val.input, pos, ctx), val.min, val.max);
         },
         .@"minecraft:noise" => |val| {
-            var noise_pos: NoisePosition = .new(@floatFromInt(pos.column.x), @floatFromInt(pos.y), @floatFromInt(pos.column.z));
-            noise_pos.x *= val.xz_scale;
-            noise_pos.y *= val.y_scale;
-            noise_pos.z *= val.xz_scale;
+            const noise_pos = NoisePosition.fromBlock(pos).mul(.fromXZandY(val.xz_scale, val.y_scale));
             return evalNoise(val.noise, noise_pos, ctx);
         },
         .@"minecraft:add" => |val| {
@@ -223,22 +219,16 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
                 1.5
             else
                 2.0) else @compileError("unsupported rarity value mapper " ++ val.rarity_value_mapper);
-            var noise_pos: NoisePosition = .new(@floatFromInt(pos.column.x), @floatFromInt(pos.y), @floatFromInt(pos.column.z));
-            noise_pos.x /= mapped;
-            noise_pos.y /= mapped;
-            noise_pos.z /= mapped;
+            const noise_pos = NoisePosition.fromBlock(pos).scale(1 / mapped);
             return mapped * @abs(evalNoise(val.noise, noise_pos, ctx));
         },
         .@"minecraft:shifted_noise" => |val| {
-            var noise_pos: NoisePosition = .new(@floatFromInt(pos.column.x), @floatFromInt(pos.y), @floatFromInt(pos.column.z));
-            noise_pos.x *= val.xz_scale;
-            noise_pos.y *= val.y_scale;
-            noise_pos.z *= val.xz_scale;
-
-            noise_pos.x += evalDensityFunction(val.shift_x, pos, ctx);
-            noise_pos.y += evalDensityFunction(val.shift_y, pos, ctx);
-            noise_pos.z += evalDensityFunction(val.shift_z, pos, ctx);
-
+            const noise_pos = NoisePosition.fromBlock(pos).mul(.fromXZandY(val.xz_scale, val.y_scale))
+                .add(.new(
+                evalDensityFunction(val.shift_x, pos, ctx),
+                evalDensityFunction(val.shift_y, pos, ctx),
+                evalDensityFunction(val.shift_z, pos, ctx),
+            ));
             return evalNoise(val.noise, noise_pos, ctx);
         },
         .@"minecraft:find_top_surface" => |val| {
@@ -297,6 +287,7 @@ fn evalDf(comptime df: *const mcg.worldgen.density_function.DensityFunction, pos
             return (f - 8) / 128;
         },
     }
+    comptime unreachable;
 }
 fn evalNoise(comptime noise_name: Id, pos: NoisePosition, ctx: anytype) f64 {
     return getNoise(ctx.noise_holder, noise_name).getValue(pos);

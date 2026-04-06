@@ -1,10 +1,224 @@
 const std = @import("std");
 const rng = @import("rng.zig");
+const zlm = @import("zlm");
 const mi32 = @import("zlm").as(i32);
 const mf64 = @import("zlm").as(f64);
 const math = @import("math.zig");
 const mcg = @import("mc-generated");
 //TODO NoisePos;
+
+pub const Position = struct {
+    const Self = @This();
+    const Real = f64;
+    x: Real,
+    y: Real,
+    z: Real,
+
+    pub const zero = Self.new(0, 0, 0);
+    pub const one = Self.new(1, 1, 1);
+    pub const unitX = Self.new(1, 0, 0);
+    pub const unitY = Self.new(0, 1, 0);
+    pub const unitZ = Self.new(0, 0, 1);
+
+    pub fn fromXZandY(xz: Real, y: Real) Self {
+        return Self{ .x = xz, .y = y, .z = xz };
+    }
+    pub fn new(x: Real, y: Real, z: Real) Self {
+        return Self{ .x = x, .y = y, .z = z };
+    }
+
+    pub fn fromBlock(pos: @import("position.zig").Block) @This() {
+        return new(@floatFromInt(pos.column.x), @floatFromInt(pos.y), @floatFromInt(pos.column.z));
+    }
+
+    pub fn map(self: Self, function: anytype) Self {
+        const params = @typeInfo(@TypeOf(function)).@"fn".params;
+        switch (params.len) {
+            1 => return new(function(self.x), function(self.y), function(self.z)),
+            2 => return new(function(Real, self.x), function(Real, self.y), function(Real, self.z)),
+            else => @compileError("function has to accept 1 or 2 arguments"),
+        }
+    }
+
+    pub fn round(self: Self) Self {
+        return new(@round(self.x), @round(self.y), @round(self.z));
+    }
+
+    pub fn floor(self: Self) Self {
+        return new(@floor(self.x), @floor(self.y), @floor(self.z));
+    }
+
+    pub fn intCast(self: Self, T: type) zlm.as(T).Vec3 {
+        return .new(@intFromFloat(self.x), @intFromFloat(self.y), @intFromFloat(self.z));
+    }
+
+    pub fn rem(self: Self, other: Self) Self {
+        return new(@rem(self.x, other.x), @rem(self.y, other.y), @rem(self.z, other.z));
+    }
+
+    pub fn mod(self: Self, other: Self) Self {
+        return new(@mod(self.x, other.x), @mod(self.y, other.y), @mod(self.z, other.z));
+    }
+
+    pub fn trunc(self: Self) Self {
+        return new(@trunc(self.x), @trunc(self.y), @trunc(self.z));
+    }
+
+    /// Initializes all values of the vector with the given value.
+    pub fn all(value: Real) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = value;
+        }
+        return result;
+    }
+
+    /// adds all components from `a` with the components of `b`.
+    pub fn add(a: Self, b: Self) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = @field(a, fld.name) + @field(b, fld.name);
+        }
+        return result;
+    }
+
+    /// subtracts all components from `a` with the components of `b`.
+    pub fn sub(a: Self, b: Self) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = @field(a, fld.name) - @field(b, fld.name);
+        }
+        return result;
+    }
+
+    /// multiplies all components from `a` with the components of `b`.
+    pub fn mul(a: Self, b: Self) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = @field(a, fld.name) * @field(b, fld.name);
+        }
+        return result;
+    }
+
+    /// divides all components from `a` by the components of `b`.
+    pub fn div(a: Self, b: Self) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = @field(a, fld.name) / @field(b, fld.name);
+        }
+        return result;
+    }
+
+    /// multiplies all components by a scalar value.
+    pub fn scale(a: Self, b: Real) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = @field(a, fld.name) * b;
+        }
+        return result;
+    }
+
+    /// returns the negative of self
+    pub fn neg(self: Self) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = -@field(self, fld.name);
+        }
+        return result;
+    }
+
+    /// returns the dot product of two vectors.
+    /// This is the sum of products of all components.
+    pub fn dot(a: Self, b: Self) Real {
+        var result: Real = 0;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            result += @field(a, fld.name) * @field(b, fld.name);
+        }
+        return result;
+    }
+
+    /// returns the magnitude of the vector.
+    pub fn length(a: Self) Real {
+        return @sqrt(a.length2());
+    }
+
+    /// returns the squared magnitude of the vector.
+    pub fn length2(a: Self) Real {
+        return Self.dot(a, a);
+    }
+
+    /// returns the distance between `a` and `b`.
+    pub fn distance(a: Self, b: Self) Real {
+        return @sqrt(distance2(a, b));
+    }
+
+    /// returns the squared distance between `a` and `b`.
+    pub fn distance2(a: Self, b: Self) Real {
+        return a.sub(b).length2();
+    }
+
+    /// returns either a normalized vector (`length() = 1`) or `zero` if the vector
+    /// has length 0.
+    pub fn normalize(vec: Self) Self {
+        const len = vec.length();
+        return if (len != 0.0)
+            vec.scale(1.0 / vec.length())
+        else
+            Self.zero;
+    }
+
+    /// applies component-wise absolute values
+    pub fn abs(a: Self) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = @abs(@field(a, fld.name));
+        }
+        return result;
+    }
+
+    /// returns a new vector where each component is the minimum of the components of the input vectors.
+    pub fn componentMin(a: Self, b: Self) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = @min(@field(a, fld.name), @field(b, fld.name));
+        }
+        return result;
+    }
+
+    /// returns a new vector where each component is the maximum of the components of the input vectors.
+    pub fn componentMax(a: Self, b: Self) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = @max(@field(a, fld.name), @field(b, fld.name));
+        }
+        return result;
+    }
+
+    /// returns a new vector where each component is clamped to the given range.
+    /// `min` and `max` must be of the same type as the vector, and every field of
+    /// `min` must be smaller or equal to the corresponding field of `max`.
+    pub fn componentClamp(a: Self, min: Self, max: Self) Self {
+        var result: Self = undefined;
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            @field(result, fld.name) = std.math.clamp(@field(a, fld.name), @field(min, fld.name), @field(max, fld.name));
+        }
+        return result;
+    }
+
+    /// linear interpolation between two vectors
+    /// only works on float vectors (Real must be a float)
+    pub fn lerp(a: Self, b: Self, f: Real) Self {
+        return a.add(b.sub(a).scale(f));
+    }
+
+    pub fn eql(a: Self, b: Self) bool {
+        inline for (@typeInfo(Self).@"struct".fields) |fld| {
+            if (@field(a, fld.name) != @field(b, fld.name))
+                return false;
+        }
+        return true;
+    }
+};
 
 pub const NoiseData = mcg.worldgen.noise;
 
@@ -53,7 +267,7 @@ pub fn NormalNoise(octave_count: comptime_int) type {
             return 0.1 * (1.0 + 1.0 / (@as(f64, @floatFromInt(actual_octaves)) + 1));
         }
 
-        pub fn getValue(self: *const @This(), pos: mf64.Vec3) f64 {
+        pub fn getValue(self: *const @This(), pos: Position) f64 {
             const INPUT_FACTOR = 1.0181268882175227;
             return (self.first.getValue(pos) + self.second.getValue(pos.scale(INPUT_FACTOR))) * self.valueFactor;
         }
@@ -74,7 +288,7 @@ pub const Blended = struct {
         };
     }
 
-    pub fn compute(self: *const @This(), pos: mf64.Vec3, xzScale: f64, yScale: f64, xzFactor: f64, yFactor: f64, smearScaleMultiplier: f64) f64 {
+    pub fn compute(self: *const @This(), pos: Position, xzScale: f64, yScale: f64, xzFactor: f64, yFactor: f64, smearScaleMultiplier: f64) f64 {
         const xzMultiplier = 684.412 * xzScale;
         const yMultiplier = 684.412 * yScale;
         const scaled_pos = pos.mul(.new(xzMultiplier, yMultiplier, xzMultiplier));
@@ -89,7 +303,7 @@ pub const Blended = struct {
         var it = std.mem.reverseIterator(&self.mainNoise.noiseLevels);
         while (it.next()) |noise| {
             const factored_pos_scaled = factored_pos.scale(scale);
-            const wrapped_factored_pos_scaled: mf64.Vec3 = .new(perlin.round(factored_pos_scaled.x), perlin.round(factored_pos_scaled.y), perlin.round(factored_pos_scaled.z));
+            const wrapped_factored_pos_scaled = factored_pos_scaled.map(perlin.round);
             main_noise_res += noise.noiseDeprecated(wrapped_factored_pos_scaled, factored_smear_y_mult * scale, factored_pos_scaled.y) / scale;
             scale /= 2.0;
         }
@@ -101,7 +315,7 @@ pub const Blended = struct {
             var it2 = std.mem.reverseIterator(&self.minLimitNoise.noiseLevels);
             while (it2.next()) |noise| {
                 const scaled_pos_scaled = scaled_pos.scale(scale);
-                const wrapped_scaled_pos_scaled: mf64.Vec3 = .new(perlin.round(scaled_pos_scaled.x), perlin.round(scaled_pos_scaled.y), perlin.round(scaled_pos_scaled.z));
+                const wrapped_scaled_pos_scaled = scaled_pos_scaled.map(perlin.round);
                 start += noise.noiseDeprecated(wrapped_scaled_pos_scaled, smeared_y_mult * scale, scaled_pos_scaled.y) / scale;
                 scale /= 2.0;
             }
@@ -111,7 +325,7 @@ pub const Blended = struct {
             var it2 = std.mem.reverseIterator(&self.maxLimitNoise.noiseLevels);
             while (it2.next()) |noise| {
                 const scaled_pos_scaled = scaled_pos.scale(scale);
-                const wrapped_scaled_pos_scaled: mf64.Vec3 = .new(perlin.round(scaled_pos_scaled.x), perlin.round(scaled_pos_scaled.y), perlin.round(scaled_pos_scaled.z));
+                const wrapped_scaled_pos_scaled = scaled_pos_scaled.map(perlin.round);
 
                 end += noise.noiseDeprecated(wrapped_scaled_pos_scaled, smeared_y_mult * scale, scaled_pos_scaled.y) / scale;
                 scale /= 2.0;
@@ -146,6 +360,7 @@ test "noise blended" {
     try std.testing.expectEqual(0.05283812245734512, noise.compute(.zero, 0.25, 0.125, 80, 160, 8));
     try std.testing.expectEqual(0.23586573475625464, noise.compute(.new(10000, 203, -20031), 0.25, 0.125, 80, 160, 8));
 }
+
 pub const Simplex = struct {
     pub const Improved = struct {
         pub const max_value = 2.0;
@@ -154,15 +369,15 @@ pub const Simplex = struct {
             return .{ .simplex = .init(rng_type, random) };
         }
 
-        pub fn noise(self: *const @This(), pos: mf64.Vec3) f64 {
+        pub fn noise(self: *const @This(), pos: Position) f64 {
             return self.noiseDeprecated(pos, 0.0, 0.0);
         }
 
-        pub fn noiseDeprecated(self: *const @This(), pos: mf64.Vec3, yScale: f64, yMax: f64) f64 {
+        pub fn noiseDeprecated(self: *const @This(), pos: Position, yScale: f64, yMax: f64) f64 {
             const offset = pos.add(self.simplex.offset);
 
-            const floored: mf64.Vec3 = .new(@floor(offset.x), @floor(offset.y), @floor(offset.z));
-            const grid: mi32.Vec3 = .new(@intFromFloat(floored.x), @intFromFloat(floored.y), @intFromFloat(floored.z));
+            const floored = offset.floor();
+            const grid = floored.intCast(i32);
             const delta = offset.sub(floored);
             const SHIFT_UP_EPSILON = 1.0E-7;
             const yoffset = if (yScale != 0.0)
@@ -173,7 +388,7 @@ pub const Simplex = struct {
             return self.sampleAndLerp(grid, delta, delta.y - yoffset);
         }
 
-        fn dot(gradIndex: u8, pos: mf64.Vec3) f64 {
+        fn dot(gradIndex: u8, pos: Position) f64 {
             return Simplex.GRADIENT[gradIndex & 15].dot(pos);
         }
 
@@ -181,8 +396,8 @@ pub const Simplex = struct {
             return self.simplex.permutation[index];
         }
 
-        fn sampleAndLerp(self: *const @This(), grid: mi32.Vec3, delta: mf64.Vec3, weirdDeltaY: f64) f64 {
-            const weird_delta: mf64.Vec3 = .new(delta.x, weirdDeltaY, delta.z);
+        fn sampleAndLerp(self: *const @This(), grid: mi32.Vec3, delta: Position, weirdDeltaY: f64) f64 {
+            const weird_delta: Position = .new(delta.x, weirdDeltaY, delta.z);
             const x: u8 = @intCast(grid.x & 0xff);
             const y: u8 = @intCast(grid.y & 0xff);
             const z: u8 = @intCast(grid.z & 0xff);
@@ -205,7 +420,7 @@ pub const Simplex = struct {
         }
     };
 
-    const GRADIENT = [_]mf64.Vec3{
+    const GRADIENT = [_]Position{
         .new(1, 1, 0),
         .new(-1, 1, 0),
         .new(1, -1, 0),
@@ -224,7 +439,7 @@ pub const Simplex = struct {
         .new(0, -1, -1),
     };
 
-    offset: mf64.Vec3,
+    offset: Position,
     permutation: [256]u8 = @import("math.zig").range(u8, 0, 255),
 
     pub fn init(rng_type: type, random: *rng.Rng(rng_type)) @This() {
@@ -241,7 +456,7 @@ pub const Simplex = struct {
         return self.permutation[@as(usize, index & 0xff)];
     }
 
-    fn getCornerNoise3D(gradientIndex: u8, pos: mf64.Vec3) f64 {
+    fn getCornerNoise3D(gradientIndex: u8, pos: Position) f64 {
         const offset = 0.5;
         const d = @max(offset - pos.x * pos.x - pos.y * pos.y - pos.z * pos.z, 0);
         return d * d * (d * d) * GRADIENT[gradientIndex & 0xf].dot(pos);
@@ -367,18 +582,18 @@ pub const perlin = struct {
                 };
             }
 
-            pub fn getValue(self: *const @This(), pos: mf64.Vec3) f64 {
+            pub fn getValue(self: *const @This(), pos: Position) f64 {
                 return self.getValueDeprecated(pos, 0, 0, false);
             }
 
-            pub fn getValueDeprecated(self: *const @This(), pos: mf64.Vec3, yScale: f64, yMax: f64, useFixedY: bool) f64 {
+            pub fn getValueDeprecated(self: *const @This(), pos: Position, yScale: f64, yMax: f64, useFixedY: bool) f64 {
                 var freq_input_factor = self.lowestFreqInputFactor;
                 var freq_value_factor = lowestFreqValueFactor;
 
                 var res: f64 = 0.0;
                 for (self.noiseLevels, self.amplitudes) |noise, amp| {
                     const input_pos = pos.scale(freq_input_factor);
-                    const rounded: mf64.Vec3 = .new(round(input_pos.x), round(input_pos.y), round(input_pos.z));
+                    const rounded = input_pos.map(perlin.round);
                     res += amp * noise.noiseDeprecated(if (useFixedY) .new(rounded.x, -noise.simplex.offset.y, rounded.z) else rounded, yScale * freq_input_factor, yMax * freq_input_factor) * freq_value_factor;
 
                     freq_input_factor *= 2.0;
@@ -446,7 +661,7 @@ pub const perlin = struct {
         return .{ .noiseLevels = noiseLevels, .highestFreqInputFactor = highestFreqInputFactor };
     }
 
-    pub fn PerlinSimplex(octave_count: comptime_int) type {
+    pub fn PerlinSimplex(comptime octave_count: usize) type {
         return struct {
             const highestFreqValueFactor: f64 = 1 / ((1 << octave_count) - 1.0);
             noiseLevels: [octave_count]?Simplex,
