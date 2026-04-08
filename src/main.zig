@@ -2,38 +2,12 @@ const mcg = @import("mc-generated");
 const zigwg = @import("zigwg");
 const rng = @import("rng.zig");
 const meta = @import("meta.zig");
-const mf64 = @import("zlm").as(f64);
 const math = @import("math.zig");
-const Pos = @import("position.zig");
-const block = @import("block.zig");
 const nbt = @import("nbt");
+const std = @import("std");
 pub const paletted = @import("paletted_container.zig");
 
 pub const PalettedContainer = paletted.PalettedContainer;
-
-const std = @import("std");
-const noises = @import("noise.zig");
-const Id = []const u8;
-const density_function = @import("density_function.zig");
-pub const std_options: std.Options = .{ .fmt_max_depth = 5 };
-
-pub const Parameter = struct {
-    min: i64,
-    max: i64,
-    pub fn from(comptime val: anytype) @This() {
-        return if (@TypeOf(val) == comptime_float)
-            .{ .min = quantize(val), .max = quantize(val) }
-        else
-            .{ .min = quantize(val[0]), .max = quantize(val[1]) };
-    }
-    pub fn quantize(val: f64) i64 {
-        return @intFromFloat(val * 1e4);
-    }
-    pub fn unquantize(val: i64) f64 {
-        const res: f64 = @floatFromInt(val);
-        return res / 1e4;
-    }
-};
 
 pub fn main() !void {
     const settings = mcg.worldgen.noise_settings.@"minecraft:overworld";
