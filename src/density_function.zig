@@ -240,10 +240,7 @@ pub fn DfEvaluator(comptime settings: mcg.worldgen.noise_settings) type {
                     const max = self.evalDensityFunction(val.upper_bound, pos);
                     var y: i32 = @intFromFloat(max);
                     while (y >= min) : (y -= val.cell_height) {
-                        var curr_pos = pos;
-                        curr_pos.y = y;
-                        const res = self.evalDensityFunction(val.density, curr_pos);
-                        if (res > 0.390625) return y;
+                        if (self.evalDensityFunction(val.density, pos.column.block(y)) > 0.390625) return y;
                     }
                     return @floatFromInt(std.math.maxInt(i32));
                 },
@@ -361,9 +358,9 @@ pub fn DfEvaluator(comptime settings: mcg.worldgen.noise_settings) type {
                 //         std.debug.print("val: {any} {any}\n", .{ self.data[0][z][y], self.data[1][z][y] });
                 // }
                 const val = math.lerp3(
-                    modNorm(pos.y, cell_height),
-                    modNorm(pos.column.x, cell_width),
-                    modNorm(pos.column.z, cell_width),
+                    math.modNorm(pos.y, cell_height),
+                    math.modNorm(pos.column.x, cell_width),
+                    math.modNorm(pos.column.z, cell_width),
                     self.data[0][z][y],
                     self.data[0][z][y + 1],
                     self.data[1][z][y],
@@ -374,9 +371,6 @@ pub fn DfEvaluator(comptime settings: mcg.worldgen.noise_settings) type {
                     self.data[1][z + 1][y + 1],
                 );
                 return val;
-            }
-            fn modNorm(numerator: anytype, denominator: anytype) f64 {
-                return @as(f64, @floatFromInt(@mod(numerator, denominator))) / @as(f64, @floatFromInt(denominator));
             }
         };
 

@@ -1,4 +1,6 @@
 const std = @import("std");
+const Direction = @import("Direction.zig");
+
 pub const Y = i12;
 pub const Height = u11;
 pub const XZ = i26;
@@ -58,12 +60,18 @@ pub const Block = packed struct {
             try std.math.sub(XZ, self.column.z, other.column.z),
         ), .y = try std.math.sub(Y, self.y, other.y) };
     }
+
     pub fn add(self: @This(), other: @This()) !@This() {
         return .{ .column = .init(
             try std.math.add(XZ, self.column.x, other.column.x),
             try std.math.add(XZ, self.column.z, other.column.z),
         ), .y = try std.math.add(Y, self.y, other.y) };
     }
+
+    pub fn move(self: @This(), direction: Direction, count: Y) !@This() {
+        return self.add(.init(direction.toPos().mul(.init(count, count, count)) catch unreachable));
+    }
+
     pub fn mul(self: @This(), other: @This()) !@This() {
         return .{ .column = .init(
             try std.math.mul(XZ, self.column.x, other.column.x),

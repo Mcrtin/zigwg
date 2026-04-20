@@ -35,3 +35,8 @@ pub fn range(comptime T: type, comptime start: T, comptime end_inclusive: T) [@a
     for (&buf, 0..) |*item, i| item.* = @as(T, @intCast(i)) + start;
     return buf;
 }
+
+pub fn modNorm(numerator: anytype, denominator: anytype) f64 {
+    return @as(f64, @floatFromInt(@mod(numerator, denominator))) / @as(f64, @floatFromInt(denominator));
+}
+
