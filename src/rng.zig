@@ -252,10 +252,9 @@ pub const Legacy = struct {
     }
 
     pub fn next(self: *@This(), Size: type) Size {
-        comptime var Unsigned = @typeInfo(Size);
-        Unsigned.int.signedness = .unsigned;
+        const bits = @typeInfo(Size).int.bits;
         self.seed = @truncate(@as(u64, self.seed) *% MULTIPLIER +% INCREMENT);
-        return @bitCast(@as(@Type(Unsigned), @intCast(self.seed >> (MODULUS_BITS - Unsigned.int.bits))));
+        return @bitCast(@as(@Int(.unsigned, bits), @intCast(self.seed >> (MODULUS_BITS - bits))));
     }
 
     pub const PositionalRandomFactory = struct {

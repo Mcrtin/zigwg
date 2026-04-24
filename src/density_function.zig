@@ -15,26 +15,13 @@ pub const NoisePosition = noises.Position;
 const NoiseHolder = makeNoiseHolderType(mcg.worldgen.noise);
 fn makeNoiseHolderType(comptime noise_data: type) type {
     const decls = @typeInfo(noise_data).@"struct".decls;
-    var out_list: [decls.len]std.builtin.Type.StructField = undefined;
-    inline for (decls, &out_list) |curr, *out| {
-        const T = noises.NormalNoise(@field(noise_data, curr.name).amplitudes.len);
-        out.* = .{
-            .name = curr.name,
-            .type = T,
-            .default_value_ptr = null,
-            .is_comptime = false,
-            .alignment = @alignOf(T),
-        };
+    var names: [decls.len][]const u8 = undefined;
+    var types: [decls.len]type = undefined;
+    inline for (decls, &names, &types) |curr, *name, *@"type"| {
+        name.* = curr.name;
+        @"type".* = noises.NormalNoise(@field(noise_data, curr.name).amplitudes.len);
     }
-
-    return @Type(.{
-        .@"struct" = .{
-            .is_tuple = false,
-            .layout = .auto,
-            .decls = &.{},
-            .fields = &out_list,
-        },
-    });
+    return @Struct(.auto, null, &names, &types, &@splat(.{}));
 }
 
 pub fn initNoiseHolder(noise_data: type, rng_type: type, rng_factory: rng.Factory(rng_type)) NoiseHolder {
@@ -130,6 +117,7 @@ pub fn DfEvaluator(comptime settings: mcg.worldgen.noise_settings) type {
 
         inline fn evalDf(self: *@This(), comptime df: *const mcg.worldgen.density_function.DensityFunction, pos: Pos.Block) f64 {
             switch (df.*) {
+                .@"minecraft:constant" => |val| return val.argument,
                 .@"minecraft:interpolated" => |val| {
                     return self.getInterpolator(resolvedf(val.argument).?).compute(val.argument, pos, self);
                 },
@@ -287,6 +275,9 @@ pub fn DfEvaluator(comptime settings: mcg.worldgen.noise_settings) type {
                     }
                     return (f - 8) / 128;
                 },
+                .@"minecraft:cache_all_in_cell",
+                .@"minecraft:shift",
+                => comptime unreachable,
             }
             comptime unreachable;
         }
@@ -545,6 +536,8 @@ fn constructContext(comptime df: mcg.worldgen.density_function.DensityF, context
         .@"minecraft:squeeze",
         .@"minecraft:invert",
         => |val| continue :loop (resolvedf(val.argument) orelse return ctx).*,
+
+        .@"minecraft:constant",
         .@"minecraft:blend_alpha",
         .@"minecraft:blend_offset",
         .@"minecraft:old_blended_noise",
@@ -552,6 +545,9 @@ fn constructContext(comptime df: mcg.worldgen.density_function.DensityF, context
         .@"minecraft:end_islands",
         .@"minecraft:y_clamped_gradient",
         => {},
+        .@"minecraft:shift",
+        .@"minecraft:cache_all_in_cell",
+        => comptime unreachable,
     }
     return ctx;
 }

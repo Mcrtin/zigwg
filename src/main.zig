@@ -9,7 +9,7 @@ pub const paletted = @import("paletted_container.zig");
 
 pub const PalettedContainer = paletted.PalettedContainer;
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     const settings = mcg.worldgen.noise_settings.@"minecraft:overworld";
     const seed = 1;
     const chunk = @import("generator.zig").gen(settings, seed);
@@ -23,16 +23,16 @@ pub fn main() !void {
             .biomes = null,
         };
 
-    try gen(&sections, "r.0.0.mca");
+    try gen(init.io, &sections, "r.0.0.mca");
 }
 
-fn gen(chunk: []const Section, path: []const u8) !void {
-    var f2 = try std.fs.cwd().createFile(path, .{});
-    defer f2.close();
+fn gen(io: std.Io, chunk: []const Section, path: []const u8) !void {
+    var f2 = try std.Io.Dir.cwd().createFile(io, path, .{});
+    defer f2.close(io);
     var wbuf: [1024]u8 = undefined;
-    var w = f2.writer(&wbuf);
+    var w = f2.writer(io, &wbuf);
     defer w.interface.flush() catch {};
-    try writeChunk(&w, 0, 0, @as(InnerChunk, .{
+    try writeChunk(io, &w, 0, 0, @as(InnerChunk, .{
         .Status = .@"minecraft:full",
         .zPos = @as(i32, 0),
         .block_entities = &.{},
@@ -58,7 +58,8 @@ fn gen(chunk: []const Section, path: []const u8) !void {
 }
 
 fn writeChunk(
-    w: *std.fs.File.Writer,
+    io: std.Io,
+    w: *std.Io.File.Writer,
     chunk_x: u5,
     chunk_z: u5,
     // offset: u24,
@@ -72,7 +73,7 @@ fn writeChunk(
     try w.interface.flush();
 
     try w.seekTo(SECTOR_BYTES + index);
-    try w.interface.writeInt(i32, @intCast(std.math.clamp(@divFloor(std.time.milliTimestamp(), 1000), std.math.minInt(i32), std.math.maxInt(i32))), .big);
+    try w.interface.writeInt(i32, @intCast(std.Io.Clock.real.now(io).toSeconds()), .big);
     try w.interface.flush();
     try w.seekTo(@as(usize, offset) * SECTOR_BYTES + @sizeOf(i32) + @sizeOf(Compression));
 

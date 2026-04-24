@@ -12,7 +12,7 @@ pub fn PackedArray(
         pub const MaxLongCount =
             std.math.divCeil(usize, count, @divTrunc(64, @as(usize, max_bits))) catch unreachable;
         pub const Bits = std.math.IntFittingRange(0, max_bits);
-        pub const Value = @Type(.{ .int = .{ .signedness = .unsigned, .bits = max_bits } });
+        pub const Value = @Int(.unsigned, max_bits);
         pub const LongIndex = std.math.IntFittingRange(0, MaxLongCount - 1);
         const ShiftInt = std.math.Log2Int(u64);
 
